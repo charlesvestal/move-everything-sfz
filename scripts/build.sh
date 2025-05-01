@@ -125,32 +125,13 @@ ${CROSS_PREFIX}gcc -O3 -fPIC \
     -Isrc/dsp \
     -I"$SFIZZ_DIR/src"
 
-# Link everything into dsp.so - use whole-archive for static libs
+# Link everything into dsp.so - whole-archive all static libs to resolve interdeps
 ${CROSS_PREFIX}g++ -O3 -shared -fPIC \
     -march=armv8-a -mtune=cortex-a72 \
     build/sfz_plugin.o \
     -Wl,--whole-archive \
-    "$SFIZZ_LIB_DIR"/libsfizz.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_internal.a \
+    "$SFIZZ_LIB_DIR"/lib*.a \
     -Wl,--no-whole-archive \
-    "$SFIZZ_LIB_DIR"/libsfizz_parser.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_messaging.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_import.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_kissfft.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_pugixml.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_cephes.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_cpuid.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_filesystem_impl.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_fmidi.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_hiir_polyphase_iir2designer.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_spin_mutex.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_spline.a \
-    "$SFIZZ_LIB_DIR"/libsfizz_tunings.a \
-    "$SFIZZ_LIB_DIR"/libst_audiofile.a \
-    "$SFIZZ_LIB_DIR"/libst_audiofile_formats.a \
-    "$SFIZZ_LIB_DIR"/libaiff.a \
-    "$SFIZZ_LIB_DIR"/libwavpack.a \
-    "$SFIZZ_LIB_DIR"/libabsl_*.a \
     -o build/dsp.so \
     -lm -lpthread -ldl -lstdc++ -latomic
 
