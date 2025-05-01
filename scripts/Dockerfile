@@ -1,6 +1,6 @@
 # Dockerfile for building SFZ module for Move Anything (ARM64)
-# Includes CMake for building sfizz from source
-FROM debian:bookworm-slim
+# Uses Debian bullseye for GCC 10 / GLIBCXX_3.4.29 compatibility with Move device
+FROM debian:bullseye-slim
 
 RUN apt-get update && apt-get install -y \
     build-essential \

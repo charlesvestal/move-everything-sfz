@@ -1,9 +1,9 @@
 /*
  * SFZ Player DSP Plugin
  *
- * Uses sfizz to render SFZ format instruments.
+ * Uses sfizz to render SFZ and DecentSampler (.dspreset) instruments.
  * Instruments are organized as folders under instruments/,
- * each containing one or more .sfz files (treated as presets).
+ * each containing one or more .sfz/.dspreset files (treated as presets).
  *
  * V2 API only - instance-based for multi-instance support.
  */
@@ -48,6 +48,7 @@ typedef struct plugin_api_v2 {
 
 /* sfizz C API */
 #include <sfizz.h>
+#include <sfizz/import/sfizz_import.h>
 
 /* Shared host API */
 static const host_api_v1_t *g_host = NULL;
@@ -124,6 +125,60 @@ static int json_get_string(const char *json, const char *key, char *out, int out
     return len;
 }
 
+/* Check if file extension is a supported instrument format */
+static int is_supported_instrument(const char *ext) {
+    return (strcasecmp(ext, ".sfz") == 0 ||
+            strcasecmp(ext, ".dspreset") == 0);
+}
+
+/* Check if a directory (or its immediate subdirs) contains instrument files.
+ * Returns 1 if found, and sets sfz_subdir to the path containing them. */
+static int dir_has_instruments(const char *dir_path, char *sfz_subdir, int sfz_subdir_len) {
+    DIR *dir = opendir(dir_path);
+    if (!dir) return 0;
+
+    struct dirent *entry;
+    /* First pass: check top level */
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+        const char *ext = strrchr(entry->d_name, '.');
+        if (ext && is_supported_instrument(ext)) {
+            closedir(dir);
+            snprintf(sfz_subdir, sfz_subdir_len, "%s", dir_path);
+            return 1;
+        }
+    }
+    closedir(dir);
+
+    /* Second pass: check one level of subdirectories */
+    dir = opendir(dir_path);
+    if (!dir) return 0;
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_name[0] == '.') continue;
+        char sub_path[MAX_PATH_LEN];
+        snprintf(sub_path, sizeof(sub_path), "%s/%s", dir_path, entry->d_name);
+        struct stat st;
+        if (stat(sub_path, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
+
+        DIR *subdir = opendir(sub_path);
+        if (!subdir) continue;
+        struct dirent *sub_entry;
+        while ((sub_entry = readdir(subdir)) != NULL) {
+            const char *ext = strrchr(sub_entry->d_name, '.');
+            if (ext && is_supported_instrument(ext)) {
+                closedir(subdir);
+                closedir(dir);
+                snprintf(sfz_subdir, sfz_subdir_len, "%s", sub_path);
+                return 1;
+            }
+        }
+        closedir(subdir);
+    }
+    closedir(dir);
+    return 0;
+}
+
 /* Sort helpers */
 static int instrument_entry_cmp(const void *a, const void *b) {
     const instrument_entry_t *ia = (const instrument_entry_t *)a;
@@ -161,22 +216,9 @@ static void scan_instruments(sfz_instance_t *inst, const char *module_dir) {
         struct stat st;
         if (stat(full_path, &st) != 0 || !S_ISDIR(st.st_mode)) continue;
 
-        /* Check if directory contains at least one .sfz file */
-        DIR *subdir = opendir(full_path);
-        if (!subdir) continue;
-
-        int has_sfz = 0;
-        struct dirent *sub_entry;
-        while ((sub_entry = readdir(subdir)) != NULL) {
-            const char *ext = strrchr(sub_entry->d_name, '.');
-            if (ext && strcasecmp(ext, ".sfz") == 0) {
-                has_sfz = 1;
-                break;
-            }
-        }
-        closedir(subdir);
-
-        if (!has_sfz) continue;
+        /* Check if directory (or subdirs) contains instrument files */
+        char sfz_dir[MAX_PATH_LEN];
+        if (!dir_has_instruments(full_path, sfz_dir, sizeof(sfz_dir))) continue;
 
         if (inst->instrument_count >= MAX_INSTRUMENTS) {
             plugin_log("Instrument list full, skipping extras");
@@ -184,7 +226,8 @@ static void scan_instruments(sfz_instance_t *inst, const char *module_dir) {
         }
 
         instrument_entry_t *instr = &inst->instruments[inst->instrument_count++];
-        strncpy(instr->path, full_path, sizeof(instr->path) - 1);
+        /* Store the path where SFZ files actually live */
+        strncpy(instr->path, sfz_dir, sizeof(instr->path) - 1);
         instr->path[sizeof(instr->path) - 1] = '\0';
         strncpy(instr->name, entry->d_name, sizeof(instr->name) - 1);
         instr->name[sizeof(instr->name) - 1] = '\0';
@@ -202,7 +245,25 @@ static void scan_instruments(sfz_instance_t *inst, const char *module_dir) {
     plugin_log(msg);
 }
 
-/* Scan .sfz files within an instrument folder (these become presets) */
+/* Add a single preset entry from a file path */
+static void add_preset_entry(sfz_instance_t *inst, const char *dir_path, const char *filename) {
+    if (inst->preset_count >= MAX_PRESETS) return;
+
+    const char *ext = strrchr(filename, '.');
+    if (!ext || !is_supported_instrument(ext)) return;
+
+    preset_entry_t *p = &inst->presets[inst->preset_count++];
+    snprintf(p->path, sizeof(p->path), "%s/%s", dir_path, filename);
+
+    /* Display name = filename without extension */
+    int name_len = ext - filename;
+    if (name_len >= MAX_NAME_LEN) name_len = MAX_NAME_LEN - 1;
+    strncpy(p->name, filename, name_len);
+    p->name[name_len] = '\0';
+}
+
+/* Scan .sfz files within an instrument folder (these become presets).
+ * Also checks one level of subdirectories for instruments with nested structures. */
 static void scan_presets(sfz_instance_t *inst, const char *instrument_path) {
     inst->preset_count = 0;
 
@@ -214,21 +275,25 @@ static void scan_presets(sfz_instance_t *inst, const char *instrument_path) {
         if (entry->d_name[0] == '.') continue;
 
         const char *ext = strrchr(entry->d_name, '.');
-        if (!ext || strcasecmp(ext, ".sfz") != 0) continue;
-
-        if (inst->preset_count >= MAX_PRESETS) {
-            plugin_log("Preset list full, skipping extras");
-            break;
+        if (ext && is_supported_instrument(ext)) {
+            add_preset_entry(inst, instrument_path, entry->d_name);
+        } else {
+            /* Check subdirectories for more SFZ files */
+            char sub_path[MAX_PATH_LEN];
+            snprintf(sub_path, sizeof(sub_path), "%s/%s", instrument_path, entry->d_name);
+            struct stat st;
+            if (stat(sub_path, &st) == 0 && S_ISDIR(st.st_mode)) {
+                DIR *subdir = opendir(sub_path);
+                if (subdir) {
+                    struct dirent *sub_entry;
+                    while ((sub_entry = readdir(subdir)) != NULL) {
+                        if (sub_entry->d_name[0] == '.') continue;
+                        add_preset_entry(inst, sub_path, sub_entry->d_name);
+                    }
+                    closedir(subdir);
+                }
+            }
         }
-
-        preset_entry_t *p = &inst->presets[inst->preset_count++];
-        snprintf(p->path, sizeof(p->path), "%s/%s", instrument_path, entry->d_name);
-
-        /* Display name = filename without .sfz extension */
-        int name_len = ext - entry->d_name;
-        if (name_len >= MAX_NAME_LEN) name_len = MAX_NAME_LEN - 1;
-        strncpy(p->name, entry->d_name, name_len);
-        p->name[name_len] = '\0';
     }
 
     closedir(dir);
@@ -243,25 +308,67 @@ static void scan_presets(sfz_instance_t *inst, const char *instrument_path) {
     plugin_log(msg);
 }
 
-/* Load a specific .sfz file into the synth */
+/* Load a .sfz or .dspreset file into the synth */
 static int load_sfz_file(sfz_instance_t *inst, const char *path) {
-    char msg[256];
+    char msg[512];
 
-    snprintf(msg, sizeof(msg), "Loading SFZ: %s", path);
+    snprintf(msg, sizeof(msg), "Loading: %s", path);
     plugin_log(msg);
 
-    if (!sfizz_load_file(inst->synth, path)) {
-        snprintf(msg, sizeof(msg), "Failed to load SFZ: %s", path);
+    /* Check file exists and is readable */
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        snprintf(msg, sizeof(msg), "File not found: %s", path);
         plugin_log(msg);
         snprintf(inst->load_error, sizeof(inst->load_error),
-                 "SFZ: failed to load file");
+                 "Instrument file not found");
+        return -1;
+    }
+    snprintf(msg, sizeof(msg), "File size: %ld bytes", (long)st.st_size);
+    plugin_log(msg);
+
+    const char *format = NULL;
+    if (!sfizz_load_or_import_file(inst->synth, path, &format)) {
+        snprintf(msg, sizeof(msg), "Failed to load: %s", path);
+        plugin_log(msg);
+        /* Check extension for more specific error */
+        const char *ext = strrchr(path, '.');
+        if (ext && strcasecmp(ext, ".dspreset") == 0) {
+            snprintf(inst->load_error, sizeof(inst->load_error),
+                     "DecentSampler import failed - check XML format");
+        } else {
+            snprintf(inst->load_error, sizeof(inst->load_error),
+                     "Failed to load instrument file");
+        }
         return -1;
     }
 
-    inst->load_error[0] = '\0';
+    int num_regions = sfizz_get_num_regions(inst->synth);
 
-    snprintf(msg, sizeof(msg), "SFZ loaded: %d regions", sfizz_get_num_regions(inst->synth));
+    if (format) {
+        snprintf(msg, sizeof(msg), "Imported %s: %d regions", format, num_regions);
+    } else {
+        snprintf(msg, sizeof(msg), "SFZ loaded: %d regions", num_regions);
+    }
     plugin_log(msg);
+
+    if (num_regions == 0) {
+        snprintf(inst->load_error, sizeof(inst->load_error),
+                 "Instrument loaded but has 0 regions (no samples mapped)");
+        plugin_log("WARNING: 0 regions - instrument will produce no sound");
+    } else {
+        /* Check if samples were actually found on disk */
+        size_t preloaded = sfizz_get_num_preloaded_samples(inst->synth);
+        snprintf(msg, sizeof(msg), "Preloaded samples: %zu", preloaded);
+        plugin_log(msg);
+        if (preloaded == 0) {
+            snprintf(inst->load_error, sizeof(inst->load_error),
+                     "Sample files not found - upload complete instrument with audio files");
+            plugin_log("WARNING: 0 preloaded samples - files missing from disk");
+        } else {
+            inst->load_error[0] = '\0';
+        }
+    }
 
     return 0;
 }
@@ -466,12 +573,17 @@ static void v2_on_midi(void *instance, const uint8_t *msg, int len, int source) 
                 sfizz_all_sound_off(inst->synth);
             } else {
                 sfizz_send_cc(inst->synth, 0, data1, data2);
+                if (data1 == 64 || data1 == 1) {  /* Log sustain/mod */
+                    char cc_msg[64];
+                    snprintf(cc_msg, sizeof(cc_msg), "CC%d = %d", data1, data2);
+                    plugin_log(cc_msg);
+                }
             }
             break;
         case 0xE0:  /* Pitch bend */
             {
-                int bend = ((int)data2 << 7) | data1;
-                /* sfizz expects raw 14-bit value for standard API */
+                int bend = (((int)data2 << 7) | data1) - 8192;
+                /* sfizz expects signed value: -8191 to +8191, center = 0 */
                 sfizz_send_pitch_wheel(inst->synth, 0, bend);
             }
             break;
