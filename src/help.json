@@ -1,0 +1,129 @@
+{
+  "title": "SFZ Player",
+  "children": [
+    {
+      "title": "Overview",
+      "lines": [
+        "SFZ sample player",
+        "using the sfizz",
+        "engine.",
+        "",
+        "Plays SFZ format",
+        "instruments with",
+        "full velocity layers,",
+        "round robin, and",
+        "key switching.",
+        "",
+        "Upload SFZ instrument",
+        "folders to add more",
+        "sounds."
+      ]
+    },
+    {
+      "title": "Setup",
+      "children": [
+        {
+          "title": "Getting Instruments",
+          "lines": [
+            "Upload SFZ instrument",
+            "folders using the ME",
+            "Installer's asset",
+            "copy feature.",
+            "",
+            "Find free instruments:",
+            "sfzinstruments.",
+            "  github.io",
+            "",
+            "Each instrument is a",
+            "folder containing",
+            ".sfz file(s) and",
+            "sample WAV files."
+          ]
+        },
+        {
+          "title": "Browsing",
+          "lines": [
+            "In standalone mode:",
+            " Jog: scroll presets",
+            " L/R: prev/next",
+            " Shift+L/R: switch",
+            "  instrument folder",
+            "",
+            "In Signal Chain:",
+            " Use the menu to",
+            " browse instruments",
+            " and presets.",
+            "",
+            "Each folder can have",
+            "multiple .sfz files",
+            "shown as presets."
+          ]
+        },
+        {
+          "title": "File Location",
+          "lines": [
+            "On-device path:",
+            "",
+            " modules/",
+            "  sound_generators/",
+            "   sfz/",
+            "    instruments/",
+            "     MyPiano/",
+            "      piano.sfz",
+            "      samples/",
+            "       *.wav",
+            "",
+            "Each subfolder in",
+            "instruments/ is one",
+            "instrument entry."
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Controls",
+      "children": [
+        {
+          "title": "Knobs",
+          "lines": [
+            "Knob 1: Octave",
+            " Transpose -4 to +4",
+            " octaves up or down",
+            "",
+            "Knob 2: Gain",
+            " Output level",
+            " 0.0 (silent) to",
+            " 2.0 (double volume)",
+            " Default: 1.0"
+          ]
+        },
+        {
+          "title": "MIDI Support",
+          "lines": [
+            "Notes:",
+            " Full velocity",
+            " sensitivity with",
+            " velocity layers",
+            "",
+            "Pitch Bend:",
+            " Range per SFZ",
+            " definition",
+            "",
+            "Aftertouch:",
+            " Channel and poly",
+            " aftertouch",
+            "",
+            "All CCs forwarded",
+            "for expression,",
+            "sustain pedal, etc.",
+            "",
+            "Program Change:",
+            " Switches preset",
+            " (.sfz file) within",
+            " current instrument"
+          ]
+        }
+      ]
+    }
+  ]
+}

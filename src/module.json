@@ -1,0 +1,73 @@
+{
+  "id": "sfz",
+  "name": "SFZ Player",
+  "abbrev": "SZ",
+  "version": "0.1.0",
+  "description": "SFZ sample player using sfizz engine",
+  "author": "sfizz by sfztools (port: charlesvestal)",
+  "license": "BSD-2-Clause",
+  "ui": "ui.js",
+  "dsp": "dsp.so",
+  "api_version": 2,
+  "capabilities": {
+    "audio_out": true,
+    "audio_in": false,
+    "midi_in": true,
+    "midi_out": true,
+    "aftertouch": true,
+    "chainable": true,
+    "component_type": "sound_generator",
+    "ui_hierarchy": {
+      "levels": {
+        "root": {
+          "name": "SFZ",
+          "params": [
+            {
+              "key": "preset",
+              "label": "Preset",
+              "type": "int",
+              "min": 0,
+              "max_param": "preset_count",
+              "default": 0
+            },
+            {
+              "key": "octave_transpose",
+              "label": "Octave",
+              "type": "int",
+              "min": -4,
+              "max": 4,
+              "default": 0
+            },
+            {
+              "key": "gain",
+              "label": "Gain",
+              "type": "float",
+              "min": 0,
+              "max": 2,
+              "default": 1.0
+            }
+          ],
+          "knobs": [
+            "octave_transpose",
+            "gain"
+          ]
+        }
+      }
+    }
+  },
+  "assets": {
+    "path": "instruments",
+    "label": "SFZ Instruments",
+    "extensions": [
+      ".sfz"
+    ],
+    "description": "Upload SFZ instrument folders. Each folder should contain .sfz file(s) and their sample files.",
+    "hint": "Find SFZ instruments at",
+    "hint_url": "https://sfzinstruments.github.io/",
+    "hint_url_label": "SFZ Instruments"
+  },
+  "defaults": {
+    "instrument_index": 0,
+    "preset": 0
+  }
+}

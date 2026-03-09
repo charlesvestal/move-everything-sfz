@@ -1,0 +1,3 @@
+[submodule "src/dsp/third_party/sfizz"]
+	path = src/dsp/third_party/sfizz
+	url = https://github.com/sfztools/sfizz.git
